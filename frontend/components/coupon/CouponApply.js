@@ -1,0 +1,438 @@
+import { useContext, useState } from "react";
+import { useEffect } from "react";
+import { GetHApi, PostHApi } from "../../apis/Apis";
+import { getToken } from "../../hooks/getToken";
+import { commaMoney } from "../../hooks/commaMoney";
+import { NGray } from "../../typings/NormalColor";
+import { PaymentContext } from "../../context/PaymentContext";
+export function CouponApply({
+  id,
+  modalVisibleId,
+  setModalVisibleId,
+  cartItemId,
+  product,
+}) {
+  const [token, setToken] = useState("");
+  const [coupons, setCoupons] = useState();
+  const { payment, setPayment } = useContext(PaymentContext);
+
+  const calcMaxDis = (product, coupon) => {
+    if (
+      (product.price * (1 - 0.01 * product.discount) - coupon.discountedPrice) *
+        product.quantity >
+      coupon.maxDiscount
+    ) {
+      return (
+        product.price * (1 - 0.01 * product.discount) * product.quantity -
+        coupon.maxDiscount
+      );
+    } else {
+      return coupon.discountedPrice * product.quantity;
+    }
+  };
+
+  const getProductMemberCoupon = async () => {
+    await GetHApi(`/api/coupons/me/products/${product.id}`, token).then(
+      (res) => {
+        setCoupons(res);
+      }
+    );
+  };
+
+  const adaptCoupon = async (couponId) => {
+    if (cartItemId) {
+      await PostHApi(`/api/carts/${cartItemId}/${couponId}`, null, token).then(
+        (res) => {
+          setPayment(
+            payment.map((product) =>
+              product.cartItemId === res.cartItemId ? res : product
+            )
+          );
+
+          onCloseHandler();
+        }
+      );
+    } else {
+      await PostHApi(
+        `/api/orders/${couponId}`,
+        { productId: product.id, quantity: product.quantity },
+        token
+      ).then((res) => {
+        // product = res;
+        setPayment([res]);
+        onCloseHandler();
+      });
+    }
+  };
+
+  const onCloseHandler = () => {
+    setModalVisibleId("");
+  };
+
+  useEffect(() => {
+    setToken(getToken());
+    if (token !== "") {
+      console.log("product: ", product);
+      getProductMemberCoupon();
+    }
+  }, [token]);
+
+  return (
+    <>
+      <div className={modalVisibleId === id ? "wrapper" : "none"}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "end",
+            width: "98%",
+            margin: "10px 0",
+            cursor: "pointer",
+          }}
+          onClick={() => {
+            onCloseHandler();
+          }}
+        >
+          <img width="24px" src="/common/cancel.png" alt="" />
+        </div>
+        <div className="container" style={{ textAlign: "left" }}>
+          <p>상품 구매 시 사용 가능한 할인쿠폰입니다.</p>
+          <table>
+            <colgroup>
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "50%" }} />
+              <col style={{ width: "30%" }} />
+            </colgroup>
+            <thead style={{ height: "48px" }}>
+              <tr>
+                <th colSpan="2">상품정보</th>
+                <th>상품가격</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style={{ height: "71px", borderBottom: "1px solid #dedede" }}>
+                <td>
+                  <img width="64px" src={product.imageUrl} alt="" />
+                </td>
+                <td style={{ textAlign: "left" }}>{product.name}</td>
+                <td>
+                  {product.discount ? (
+                    <>
+                      <p style={{ marginBottom: "0" }}>
+                        {commaMoney(
+                          Math.ceil(
+                            product.price * (1 - 0.01 * product.discount)
+                          ) * product.quantity
+                        )}
+                        원
+                      </p>
+                      <p style={{ marginBottom: "0" }}>
+                        <span>
+                          {commaMoney(product.price * product.quantity)}원
+                        </span>
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p style={{ marginBottom: "0" }}>
+                        {commaMoney(product.price * product.quantity)}원
+                      </p>
+                    </>
+                  )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div className="ownContainer" style={{ textAlign: "left" }}>
+          <p>적용 가능한 쿠폰</p>
+          <div className="tableWrapper">
+            <table>
+              <colgroup>
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "10%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "20%" }} />
+                <col style={{ width: "15%" }} />
+                <col style={{ width: "5%" }} />
+              </colgroup>
+              <thead style={{ height: "59px" }}>
+                <tr>
+                  <th>쿠폰명</th>
+                  <th>할인</th>
+                  <th>최소 주문금액</th>
+                  <th>최대 할인금액</th>
+                  <th>사용기한</th>
+                  <th>적용가</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {coupons
+                  ?.filter(
+                    (coupon) =>
+                      !coupon.isDownloadable &&
+                      product.price *
+                        product.quantity *
+                        (1 - 0.01 * product.discount) >
+                        coupon.minOrderPrice
+                  )
+                  .map((coupon, idx) => {
+                    return (
+                      <tr
+                        key={idx}
+                        style={{
+                          height: "59px",
+                          borderBottom: "1px solid #dedede",
+                        }}
+                      >
+                        <td>{coupon.name}</td>
+                        <td>
+                          {coupon.percentage ? `${coupon.percentage}%` : "X"}
+                        </td>
+                        <td>{commaMoney(coupon.minOrderPrice) || 0}원</td>
+                        <td>{commaMoney(coupon.maxDiscount)}원</td>
+                        <td>{coupon.expiredAt.slice(0, 10)}</td>
+                        <td>{commaMoney(calcMaxDis(product, coupon))}원</td>
+                        <td
+                          style={{
+                            height: "59px",
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                          }}
+                        >
+                          <div
+                            style={{ cursor: "pointer" }}
+                            onClick={() => {
+                              adaptCoupon(coupon.id);
+                            }}
+                          >
+                            적용
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <style jsx>{`
+        .none {
+          display: none;
+        }
+
+        @media screen and (min-width: 769px) {
+          /* 데스크탑에서 사용될 스타일을 여기에 작성합니다. */
+          .wrapper {
+            width: 800px;
+            height: 900px;
+            margin-top: 5px;
+            .container {
+              p {
+                width: 90%;
+                margin: 0 auto 10px;
+                font-weight: bold;
+
+                span {
+                  font-size: 14px;
+                  color: ${NGray};
+                  text-decoration: line-through;
+                }
+              }
+
+              table {
+                width: 90%;
+                border-collapse: collapse;
+                margin: 0 auto;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px solid;
+                  border-bottom: 1px solid;
+                }
+              }
+            }
+
+            .tableWrapper {
+              max-height: 600px;
+              overflow: auto;
+              margin: auto;
+              width: 90%;
+
+              table {
+                width: 100%;
+              }
+            }
+
+            .ownContainer {
+              margin-top: 30px;
+
+              p {
+                font-size: 18px;
+                width: 90%;
+                margin: 0 auto 15px;
+                font-weight: bold;
+              }
+
+              table {
+                border-collapse: collapse;
+                margin: 0 auto;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px double;
+                  border-bottom: 1px double;
+                }
+              }
+            }
+          }
+        }
+
+        @media screen and (max-width: 768px) {
+          /* 태블릿에 사용될 스트일 시트를 여기에 작성합니다. */
+          .wrapper {
+            width: 80vw;
+            min-height: 90vw;
+            margin-top: 1vw;
+            .container {
+              p {
+                width: 90%;
+                margin: 0 auto 3vw;
+                font-weight: bold;
+
+                span {
+                  font-size: 1.5vw;
+                  color: ${NGray};
+                  text-decoration: line-through;
+                }
+              }
+
+              table {
+                width: 90%;
+                border-collapse: collapse;
+                margin: 0 auto;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px solid;
+                  border-bottom: 1px solid;
+                }
+              }
+            }
+
+            .tableWrapper {
+              max-height: 400px;
+              overflow: auto;
+              margin: auto;
+              width: 90%;
+
+              table {
+                width: 100%;
+              }
+            }
+
+            .ownContainer {
+              margin-top: 3vw;
+              p {
+                font-size: 2vw;
+                width: 90%;
+                margin: 0 auto 2vw;
+                font-weight: bold;
+              }
+
+              table {
+                border-collapse: collapse;
+                margin: 0 auto;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px double;
+                  border-bottom: 1px double;
+                }
+              }
+            }
+          }
+        }
+
+        @media screen and (max-width: 480px) {
+          /* 모바일에 사용될 스트일 시트를 여기에 작성합니다. */
+          .wrapper {
+            width: 380px;
+            min-height: 500px;
+            margin-top: 5px;
+            .container {
+              p {
+                width: 90%;
+                margin: 0 auto 10px;
+                font-weight: bold;
+                font-size: 12px;
+
+                span {
+                  font-size: 10px;
+                  color: ${NGray};
+                  text-decoration: line-through;
+                }
+              }
+
+              table {
+                width: 90%;
+                border-collapse: collapse;
+                margin: 0 auto;
+                font-size: 12px;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px solid;
+                  border-bottom: 1px solid;
+                }
+              }
+            }
+
+            .tableWrapper {
+              max-height: 300px;
+              overflow: auto;
+              margin: auto;
+              width: 90%;
+
+              table {
+                width: 100%;
+              }
+            }
+
+            .ownContainer {
+              margin-top: 20px;
+              p {
+                font-size: 12px;
+                width: 90%;
+                margin: 0 auto 15px;
+                font-weight: bold;
+              }
+
+              table {
+                border-collapse: collapse;
+                margin: 0 auto;
+                font-size: 12px;
+                text-align: center;
+
+                thead {
+                  height: 4vw;
+                  border-top: 1px double;
+                  border-bottom: 1px double;
+                }
+              }
+            }
+          }
+        }
+      `}</style>
+    </>
+  );
+}

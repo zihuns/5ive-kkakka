@@ -1,0 +1,153 @@
+buildscript {
+    ext {
+        queryDslVersion = "5.0.0"
+    }
+}
+
+plugins {
+    id 'org.springframework.boot' version '2.7.3'
+    id 'io.spring.dependency-management' version '1.0.13.RELEASE'
+    id 'org.asciidoctor.jvm.convert' version '3.3.2'
+    id 'com.ewerk.gradle.plugins.querydsl' version '1.0.10'
+    id 'java'
+}
+
+group = 'kkakka'
+version = '0.0.1-SNAPSHOT'
+sourceCompatibility = '11'
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+ext {
+    set('springCloudVersion', "2021.0.4")
+    set('snippetsDir', file("build/generated-snippets"))
+}
+
+dependencies {
+    /* Application */
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+
+    implementation 'io.jsonwebtoken:jjwt:0.9.1'
+    implementation 'com.google.code.gson:gson:2.9.0'
+
+    /* Spring Cloud */
+    implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+
+    /* Spring OpenFeign */
+    implementation 'org.springframework.cloud:spring-cloud-starter-openfeign'
+
+    /* Spring Cloud Config */
+    implementation group: 'org.springframework.cloud', name: 'spring-cloud-starter-config'
+    implementation group: 'org.springframework.cloud', name: 'spring-cloud-starter-bootstrap'
+
+    /* Spring Cloud Bus */
+    implementation group: 'org.springframework.boot', name: 'spring-boot-starter-actuator'
+    implementation group: 'org.springframework.cloud', name: 'spring-cloud-starter-bus-amqp'
+
+    /* DB */
+    runtimeOnly 'com.h2database:h2'
+    runtimeOnly 'mysql:mysql-connector-java'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-mysql'
+
+    /* lombok */
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    /* Test */
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'io.rest-assured:rest-assured'
+    testImplementation 'org.springframework.restdocs:spring-restdocs-restassured'
+    implementation 'org.springframework.cloud:spring-cloud-starter-contract-stub-runner'
+
+    /* Log */
+    implementation 'dev.akkinoc.spring.boot:logback-access-spring-boot-starter:3.4.0'
+    implementation 'net.rakugakibox.spring.boot:logback-access-spring-boot-starter:2.12.0'
+    
+    /* Querydsl*/
+    implementation "com.querydsl:querydsl-jpa:${queryDslVersion}"
+    implementation "com.querydsl:querydsl-apt:${queryDslVersion}"
+
+    /* micrometer */
+    implementation group: 'io.micrometer', name: 'micrometer-registry-prometheus', version: '1.9.3'
+
+    /* Kafka */
+    implementation 'org.springframework.kafka:spring-kafka'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
+    /* elasticsearch */
+    implementation 'org.springframework.boot:spring-boot-starter-data-elasticsearch:2.6.8'
+
+    /* Redis */
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    implementation (group: 'it.ozimov', name: 'embedded-redis', version: '0.7.3') {
+        exclude group: 'org.slf4j', module: 'slf4j-simple'
+    }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+
+tasks.named('test') {
+    outputs.dir snippetsDir
+    useJUnitPlatform()
+}
+
+// asciidoctor
+asciidoctor {
+    dependsOn test
+    inputs.dir snippetsDir
+}
+
+task createDocument(type: Copy) {
+    dependsOn asciidoctor
+    asciidoctor
+    from file("build/docs/asciidoc")
+    into file("src/main/resources/static/docs")
+}
+
+build {
+    dependsOn createDocument
+}
+
+bootJar {
+    dependsOn createDocument
+    from("${asciidoctor.outputDir}") {
+        into 'static'
+    }
+}
+
+// querydsl
+def querydslDir = "$buildDir/generated/querydsl"
+
+querydsl {
+    jpa = true
+    querydslSourcesDir(querydslDir)
+}
+
+sourceSets {
+    main.java.srcDir querydslDir
+}
+
+compileQuerydsl {
+    options.annotationProcessorPath = configurations.querydsl
+}
+
+configurations {
+    compileOnly {
+        extendsFrom annotationProcessor
+    }
+    querydsl.extendsFrom compileClasspath
+}
