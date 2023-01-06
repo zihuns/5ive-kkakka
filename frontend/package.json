@@ -15,6 +15,7 @@
     "@emotion/styled": "^11.10.4",
     "@mui/icons-material": "^5.10.9",
     "@mui/material": "^5.10.9",
+    "@netlify/plugin-nextjs": "^4.29.4",
     "axios": "^0.27.2",
     "gsap": "^3.11.3",
     "json-server": "^0.17.0",
